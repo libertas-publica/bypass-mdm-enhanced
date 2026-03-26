@@ -2,7 +2,7 @@
 
 [Chinese Version / 中文版](README-CN.md)
 
-This project extends the original MDM bypass script by Assaf Dori. This enhanced version incorporates bypass and persistence logic derived from the analysis of the commercial tool micaixin.cn and scripts from the Dora Fast Solve (多啦快解) toolset.
+This project extends the original MDM bypass script by Assaf Dori. This enhanced version incorporates bypass and persistence logic derived from the analysis of the commercial tool micaixin.cn and scripts from the Dora Fast Solve (多啦快解) toolset on Xianyu.
 
 ---
 
@@ -13,12 +13,13 @@ This version implements the technical features identified through comprehensive 
 ### 1. Logic Derived from micaixin.cn
 *   **System Daemon Suppression**: Initializes the system flag `/var/db/.com.apple.mdmclient.daemon.forced_disable` to prevent the `mdmclient` process from initializing.
 *   **Direct Configuration Modification**: Uses `PlistBuddy` to set `CloudConfigRecordFound`, `CloudConfigHasActivationRecord`, and `CloudConfigProfileInstalled` to `false` in the system database.
-*   **Attribute Locking**: Applies the `uchg` (User Immutable) flag to bypass markers and Plist configurations to prevent automated restoration by the operating system.
+*   **Attribute Locking**: Applies the `uchg` (User Immutable) flag to bypass markers and Plist configurations to prevent automated restoration.
 *   **IPv6 Connectivity Blocking**: Implements IPv6 (`::`) entries in the hosts file to block MDM synchronization via modern network tunnels.
 
-### 2. Logic Derived from Dora Fast Solve
+### 2. Logic Derived from Dora Fast Solve (多啦快解)
 *   **FileVault Volume Management**: Includes logic to detect and unlock APFS volumes protected by FileVault, ensuring accessibility to the system configuration paths.
 *   **Granular Service Suppression**: Implements explicit `launchctl` disable and `bootout` commands for `cloudconfigurationd`, `ManagedClientAgent`, and other management daemons across system and user domains.
+*   **Precise Activation State Management**: Explicitly removes positive activation records (`.cloudConfigRecordFound`, etc.) to prevent the system from triggering enrollment sequences based on file existence.
 
 ---
 

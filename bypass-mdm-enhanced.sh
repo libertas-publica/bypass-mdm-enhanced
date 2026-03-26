@@ -149,8 +149,20 @@ select opt in "${options[@]}"; do
 		# 4. Markers and Plist Modification (Persistence logic)
 		config_path="$system_path/var/db/ConfigurationProfiles/Settings"
 		mkdir -p "$config_path" 2>/dev/null
-		rm -rf "$config_path"/.cloudConfig* 2>/dev/null
-		markers=(".cloudConfigProfileInstalled" ".cloudConfigRecordNotFound" ".cloudConfigRecordFound" ".cloudConfigHasActivationRecord" ".cloudConfigNoActivationRecord" ".cloudConfigUserSkippedEnrollment" ".CloudConfigDelete")
+		
+		# Remove positive activation records (Strict parity with Dora script)
+		info "Removing existing activation records..."
+		rm -rf "$config_path"/.cloudConfigHasActivationRecord 2>/dev/null
+		rm -rf "$config_path"/.cloudConfigRecordFound 2>/dev/null
+		
+		# Create and lock negative/bypass markers (Dora + Micaixin logic)
+		markers=(
+			".cloudConfigProfileInstalled"
+			".cloudConfigRecordNotFound"
+			".cloudConfigNoActivationRecord"
+			".cloudConfigUserSkippedEnrollment"
+			".CloudConfigDelete"
+		)
 		for marker in "${markers[@]}"; do
 			chflags nouchg "$config_path/$marker" 2>/dev/null
 			touch "$config_path/$marker" 2>/dev/null
