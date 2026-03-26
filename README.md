@@ -2,7 +2,7 @@
 
 [Chinese Version / 中文版](README-CN.md)
 
-This project extends the original MDM bypass script by Assaf Dori. This enhanced version incorporates bypass and persistence logic derived from the analysis of the commercial tool micaixin.cn and scripts from the Dora Fast Solve (多啦快解) toolset on Xianyu.
+This project extends the original MDM bypass script by Assaf Dori. This enhanced version incorporates bypass and persistence logic derived from the analysis of the commercial tool micaixin.cn and scripts from the Dora Fast Solve (多啦快解) script on Xianyu.
 
 ---
 
