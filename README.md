@@ -1,24 +1,24 @@
-# Bypass MDM Enhanced (rponeawa)
+# Bypass MDM Enhanced
 
 [Chinese Version / 中文版](README-CN.md)
 
-This project extends the original MDM bypass script by Assaf Dori. This enhanced version incorporates core bypass and persistence logic derived from the reverse engineering of **micaixin.cn** and analysis of scripts from **多啦快解 (Dora Fast Solve)** on Xianyu.
+This project extends the original MDM bypass script by Assaf Dori. This enhanced version incorporates bypass and persistence logic derived from the analysis of the commercial tool micaixin.cn and scripts from the Dora Fast Solve (多啦快解) toolset.
 
 ---
 
 ## Technical Enhancements
 
-This version implements the following technical features identified through binary and script analysis:
+This version implements the technical features identified through comprehensive binary and script analysis:
 
-### 1. From micaixin.cn Analysis
-*   **System Daemon Suppression**: Initializes the system flag `/var/db/.com.apple.mdmclient.daemon.forced_disable` to force the `mdmclient` process to terminate upon start.
-*   **Direct Configuration Modification**: Uses `PlistBuddy` to explicitly set `CloudConfigRecordFound`, `CloudConfigHasActivationRecord`, and `CloudConfigProfileInstalled` to `false` in the core system database.
-*   **Hardware-level Attribute Locking**: Applies the `uchg` (User Immutable) flag to all bypass markers and Plist configurations to prevent automated system restoration.
-*   **IPv6 Connectivity Blocking**: Includes IPv6 (`::`) entries in the hosts file to prevent MDM synchronization via IPv6 tunnels.
+### 1. Logic Derived from micaixin.cn
+*   **System Daemon Suppression**: Initializes the system flag `/var/db/.com.apple.mdmclient.daemon.forced_disable` to prevent the `mdmclient` process from initializing.
+*   **Direct Configuration Modification**: Uses `PlistBuddy` to set `CloudConfigRecordFound`, `CloudConfigHasActivationRecord`, and `CloudConfigProfileInstalled` to `false` in the system database.
+*   **Attribute Locking**: Applies the `uchg` (User Immutable) flag to bypass markers and Plist configurations to prevent automated restoration by the operating system.
+*   **IPv6 Connectivity Blocking**: Implements IPv6 (`::`) entries in the hosts file to block MDM synchronization via modern network tunnels.
 
-### 2. From 多啦快解 (Dora Fast Solve) Analysis
-*   **FileVault Disk Decryption**: Includes logic to detect and unlock APFS volumes protected by FileVault, ensuring accessibility to the system database.
-*   **Extended Service Suppression**: Implements explicit `launchctl` disable commands for `cloudconfigurationd` and other management agents as an additional layer of defense.
+### 2. Logic Derived from Dora Fast Solve
+*   **FileVault Volume Management**: Includes logic to detect and unlock APFS volumes protected by FileVault, ensuring accessibility to the system configuration paths.
+*   **Granular Service Suppression**: Implements explicit `launchctl` disable and `bootout` commands for `cloudconfigurationd`, `ManagedClientAgent`, and other management daemons across system and user domains.
 
 ---
 
@@ -45,32 +45,38 @@ Run the following command:
 curl -L https://raw.githubusercontent.com/rponeawa/bypass-mdm-enhanced/main/bypass-mdm-enhanced.sh -o bypass-mdm.sh && chmod +x ./bypass-mdm.sh && ./bypass-mdm.sh
 ```
 
-**6. Bypass Selection**
+**6. Volume Detection**
+The script will identify the System and Data volumes automatically.
+
+**7. Bypass Selection**
 Select Option 1: "Bypass MDM from Recovery".
 
-**7. Account Configuration**
+**8. Account Configuration**
 Configure the temporary administrator account or utilize default values.
 
-**8. Finalization**
+**9. Finalization**
 Wait for the confirmation message: "Bypass Completed Successfully".
 
-**9. Reboot**
+**10. Reboot**
 Exit the Terminal and restart the Mac.
 
 ---
 
 ## Post-Installation Steps
 
-**10. Authentication**
+**11. Authentication**
 Login using the temporary account (Default: Apple / 1234).
 
-**11. Setup Assistant**
+**12. Setup Assistant**
 Skip all introductory prompts (Apple ID, Siri, Touch ID, Location Services).
 
-**12. Primary Account Creation**
+**13. Primary Account Creation**
 Navigate to System Settings > Users and Groups and create a permanent administrator account.
 
-**13. System Cleanup**
+**14. Account Migration**
+Log out of the temporary account and log into the new primary account.
+
+**15. System Cleanup**
 Delete the temporary administrator account from System Settings.
 
 ---

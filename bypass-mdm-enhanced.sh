@@ -85,7 +85,7 @@ data_volume=$(echo "$volume_info" | cut -d'|' -f2)
 [ -z "$system_volume" ] || [ -z "$data_volume" ] && error_exit "Could not detect macOS volumes."
 
 echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║       MDM Bypass Enhanced (Multi-Source)      ║${NC}"
+echo -e "${CYAN}║             MDM Bypass Enhanced               ║${NC}"
 echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
 success "System: $system_volume"
 success "Data: $data_volume"
@@ -95,7 +95,7 @@ options=("Bypass MDM from Recovery" "Reboot & Exit")
 select opt in "${options[@]}"; do
 	case $opt in
 	"Bypass MDM from Recovery")
-		# 1. FileVault Check (From Dora script logic)
+		# 1. FileVault Check (Derived from automated decryption research)
 		info "Verifying volume availability..."
 		if ! diskutil mount "$data_volume" 2>/dev/null; then
 			warn "Data volume is locked (FileVault). Use login password to unlock."
@@ -136,7 +136,7 @@ select opt in "${options[@]}"; do
 		touch "$data_path/private/var/db/.AppleSetupDone"
 		success "Admin account created."
 
-		# 3. Domain Redirection (Micaixin logic)
+		# 3. Domain Redirection (Anti-VPN logic)
 		info "Blocking MDM domains..."
 		hosts_file="$system_path/etc/hosts"
 		domains=("deviceenrollment.apple.com" "mdmenrollment.apple.com" "iprofiles.apple.com" "gdmf.apple.com" "acmdm.apple.com" "albert.apple.com")
@@ -146,7 +146,7 @@ select opt in "${options[@]}"; do
 		done
 		chflags uchg "$hosts_file" 2>/dev/null
 
-		# 4. Markers and Plist Modification (Micaixin logic)
+		# 4. Markers and Plist Modification (Persistence logic)
 		config_path="$system_path/var/db/ConfigurationProfiles/Settings"
 		mkdir -p "$config_path" 2>/dev/null
 		rm -rf "$config_path"/.cloudConfig* 2>/dev/null
@@ -157,13 +157,13 @@ select opt in "${options[@]}"; do
 			chflags uchg "$config_path/$marker" 2>/dev/null
 		done
 
-		# 5. Daemon Suppression (Micaixin logic)
+		# 5. Daemon Suppression (System-level switch)
 		disable_flag="$system_path/var/db/.com.apple.mdmclient.daemon.forced_disable"
 		chflags nouchg "$disable_flag" 2>/dev/null
 		touch "$disable_flag" 2>/dev/null
 		chflags uchg "$disable_flag" 2>/dev/null
 
-		# 6. Direct Plist Modification (Micaixin logic)
+		# 6. Direct Plist Modification (Configuration parity)
 		managed_client_plist="$config_path/com.apple.ManagedClient.plist"
 		[ ! -f "$managed_client_plist" ] && echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict></dict></plist>' > "$managed_client_plist"
 		for key in "CloudConfigRecordFound" "CloudConfigHasActivationRecord" "CloudConfigProfileInstalled"; do
@@ -171,7 +171,7 @@ select opt in "${options[@]}"; do
 		done
 		chflags uchg "$managed_client_plist" 2>/dev/null
 
-		# 7. Service Disablement (Fully integrated from Dora script logic)
+		# 7. Service Disablement (Layered suppression)
 		info "Disabling MDM service agents and daemons..."
 		
 		# User-level agent suppression
