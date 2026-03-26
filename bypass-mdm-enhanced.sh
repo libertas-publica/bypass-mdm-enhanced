@@ -30,25 +30,54 @@ info() {
 	echo -e "${BLU}ℹ $1${NC}"
 }
 
-# Validation functions
+# Validation function for username
 validate_username() {
 	local username="$1"
-	if [ -z "$username" ] || [ ${#username} -gt 31 ] || ! [[ "$username" =~ ^[a-zA-Z0-9_-]+$ ]] || ! [[ "$username" =~ ^[a-zA-Z_] ]]; then return 1; fi
+	if [ -z "$username" ]; then
+		echo "Username cannot be empty"
+		return 1
+	fi
+	if [ ${#username} -gt 31 ]; then
+		echo "Username too long (max 31 characters)"
+		return 1
+	fi
+	if ! [[ "$username" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+		echo "Username can only contain letters, numbers, underscore, and hyphen"
+		return 1
+	fi
+	if ! [[ "$username" =~ ^[a-zA-Z_] ]]; then
+		echo "Username must start with a letter or underscore"
+		return 1
+	fi
 	return 0
 }
 
+# Validation function for password
 validate_password() {
 	local password="$1"
-	if [ -z "$password" ] || [ ${#password} -lt 4 ]; then return 1; fi
+	if [ -z "$password" ]; then
+		echo "Password cannot be empty"
+		return 1
+	fi
+	if [ ${#password} -lt 4 ]; then
+		echo "Password too short (minimum 4 characters recommended)"
+		return 1
+	fi
 	return 0
 }
 
+# Check if user already exists
 check_user_exists() {
 	local dscl_path="$1"
 	local username="$2"
-	dscl -f "$dscl_path" localhost -read "/Local/Default/Users/$username" 2>/dev/null > /dev/null
+	if dscl -f "$dscl_path" localhost -read "/Local/Default/Users/$username" 2>/dev/null; then
+		return 0 # User exists
+	else
+		return 1 # User doesn't exist
+	fi
 }
 
+# Find available UID
 find_available_uid() {
 	local dscl_path="$1"
 	local uid=501
@@ -59,72 +88,162 @@ find_available_uid() {
 		fi
 		uid=$((uid + 1))
 	done
-	echo "501"
+	echo "501" 
+	return 1
 }
 
-# Detection Logic (Restored to stable strategy)
+# Function to detect system volumes with multiple fallback strategies (Restored Original)
 detect_volumes() {
 	local system_vol=""
 	local data_vol=""
+
+	info "Detecting system volumes..." >&2
+
+	# Strategy 1: Look for common macOS APFS volume patterns
 	for vol in /Volumes/*; do
-		if [ -d "$vol/System" ] && [[ ! $(basename "$vol") =~ "Data"$ ]] && [[ ! $(basename "$vol") =~ "Recovery" ]]; then
-			system_vol=$(basename "$vol"); break
+		if [ -d "$vol" ]; then
+			vol_name=$(basename "$vol")
+			if [[ ! "$vol_name" =~ "Data"$ ]] && [[ ! "$vol_name" =~ "Recovery" ]] && [ -d "$vol/System" ]; then
+				system_vol="$vol_name"
+				info "Found system volume: $system_vol" >&2
+				break
+			fi
 		fi
 	done
-	if [ -d "/Volumes/Data" ]; then data_vol="Data"
-	elif [ -n "$system_vol" ] && [ -d "/Volumes/$system_vol - Data" ]; then data_vol="$system_vol - Data"
+
+	# Strategy 2: Fallback
+	if [ -z "$system_vol" ]; then
+		for vol in /Volumes/*; do
+			if [ -d "$vol/System" ]; then
+				system_vol=$(basename "$vol")
+				warn "Using volume with /System directory: $system_vol" >&2
+				break
+			fi
+		done
 	fi
+
+	# Strategy 3: Data volume detection
+	if [ -d "/Volumes/Data" ]; then
+		data_vol="Data"
+		info "Found data volume: $data_vol" >&2
+	elif [ -n "$system_vol" ] && [ -d "/Volumes/$system_vol - Data" ]; then
+		data_vol="$system_vol - Data"
+		info "Found data volume: $data_vol" >&2
+	else
+		for vol in /Volumes/*Data; do
+			if [ -d "$vol" ]; then
+				data_vol=$(basename "$vol")
+				warn "Found data volume: $data_vol" >&2
+				break
+			fi
+		done
+	fi
+
+	if [ -z "$system_vol" ] || [ -z "$data_vol" ]; then
+		error_exit "Could not detect system or data volume. Ensure you are in Recovery mode."
+	fi
+
 	echo "$system_vol|$data_vol"
 }
 
-# Start Process
+# Detect volumes at startup
 volume_info=$(detect_volumes)
 system_volume=$(echo "$volume_info" | cut -d'|' -f1)
 data_volume=$(echo "$volume_info" | cut -d'|' -f2)
 
-[ -z "$system_volume" ] || [ -z "$data_volume" ] && error_exit "Could not detect macOS volumes."
-
+# Display header
+echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║             MDM Bypass Enhanced               ║${NC}"
 echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
-success "System: $system_volume"
-success "Data: $data_volume"
+echo ""
+success "System Volume: $system_volume"
+success "Data Volume: $data_volume"
+echo ""
 
+# Prompt user for choice
 PS3='Please enter your choice: '
 options=("Bypass MDM from Recovery" "Reboot & Exit")
 select opt in "${options[@]}"; do
 	case $opt in
 	"Bypass MDM from Recovery")
-		# 1. FileVault Check (Derived from automated decryption research)
-		info "Verifying volume availability..."
+		echo ""
+		echo -e "${YEL}═══════════════════════════════════════${NC}"
+		echo -e "${YEL}  Starting MDM Bypass Process${NC}"
+		echo -e "${YEL}═══════════════════════════════════════${NC}"
+		echo ""
+
+		# FileVault Check (Integrated from decryption research)
 		if ! diskutil mount "$data_volume" 2>/dev/null; then
-			warn "Data volume is locked (FileVault). Use login password to unlock."
-			diskutil apfs unlockVolume "$data_volume" || error_exit "Failed to unlock."
+			warn "Data volume is locked (FileVault). Please enter your login password to unlock."
+			diskutil apfs unlockVolume "$data_volume" || error_exit "Failed to unlock Data volume."
 		fi
 
-		# Normalize names
-		[ "$data_volume" != "Data" ] && diskutil rename "$data_volume" "Data" 2>/dev/null && data_volume="Data"
+		# Normalize data volume name if needed
+		if [ "$data_volume" != "Data" ]; then
+			info "Renaming data volume to 'Data' for consistency..."
+			if diskutil rename "$data_volume" "Data" 2>/dev/null; then
+				success "Data volume renamed successfully"
+				data_volume="Data"
+			else
+				warn "Could not rename data volume, continuing with: $data_volume"
+			fi
+		fi
 
+		# Validate critical paths
+		info "Validating system paths..."
 		system_path="/Volumes/$system_volume"
-		data_path="/Volumes/Data"
+		data_path="/Volumes/$data_volume"
 		dscl_path="$data_path/private/var/db/dslocal/nodes/Default"
 
-		# 2. User Creation
-		echo -e "\n${CYAN}Account Configuration${NC}"
-		read -p "Fullname [Apple]: " realName; realName="${realName:=Apple}"
+		if [ ! -d "$system_path" ] || [ ! -d "$data_path" ] || [ ! -d "$dscl_path" ]; then
+			error_exit "System paths validation failed."
+		fi
+		success "All system paths validated"
+		echo ""
+
+		# Create Temporary User (Restored Original interactive logic)
+		echo -e "${CYAN}Creating Temporary Admin User${NC}"
+		echo -e "${NC}Press Enter to use defaults (recommended)${NC}"
+
+		read -p "Enter Temporary Fullname (Default is 'Apple'): " realName
+		realName="${realName:=Apple}"
+
 		while true; do
-			read -p "Username [Apple]: " username; username="${username:=Apple}"
-			validate_username "$username" && break
-			warn "Invalid username."
-		done
-		while true; do
-			read -p "Password [1234]: " passw; passw="${passw:=1234}"
-			validate_password "$passw" && break
-			warn "Password too short."
+			read -p "Enter Temporary Username (Default is 'Apple'): " username
+			username="${username:=Apple}"
+			if validation_msg=$(validate_username "$username"); then
+				break
+			else
+				warn "$validation_msg"
+			fi
 		done
 
+		if check_user_exists "$dscl_path" "$username"; then
+			warn "User '$username' already exists."
+			read -p "Use a different username? (y/n): " response
+			if [[ "$response" =~ ^[Yy]$ ]]; then
+				while true; do
+					read -p "Enter a different username: " username
+					validate_username "$username" && ! check_user_exists "$dscl_path" "$username" && break
+				done
+			fi
+		fi
+
+		while true; do
+			read -p "Enter Temporary Password (Default is '1234'): " passw
+			passw="${passw:=1234}"
+			if validation_msg=$(validate_password "$passw"); then
+				break
+			else
+				warn "$validation_msg"
+			fi
+		done
+
+		# User Creation (Restored Original detail)
 		available_uid=$(find_available_uid "$dscl_path")
-		dscl -f "$dscl_path" localhost -create "/Local/Default/Users/$username"
+		info "Creating user account: $username (UID: $available_uid)"
+		dscl -f "$dscl_path" localhost -create "/Local/Default/Users/$username" || error_exit "Failed to create user account"
 		dscl -f "$dscl_path" localhost -create "/Local/Default/Users/$username" UserShell "/bin/zsh"
 		dscl -f "$dscl_path" localhost -create "/Local/Default/Users/$username" RealName "$realName"
 		dscl -f "$dscl_path" localhost -create "/Local/Default/Users/$username" UniqueID "$available_uid"
@@ -133,29 +252,33 @@ select opt in "${options[@]}"; do
 		dscl -f "$dscl_path" localhost -create "/Local/Default/Users/$username" NFSHomeDirectory "/Users/$username"
 		dscl -f "$dscl_path" localhost -passwd "/Local/Default/Users/$username" "$passw"
 		dscl -f "$dscl_path" localhost -append "/Local/Default/Groups/admin" GroupMembership "$username"
+		
 		touch "$data_path/private/var/db/.AppleSetupDone"
-		success "Admin account created."
+		success "User account created successfully"
+		echo ""
 
-		# 3. Domain Redirection (Anti-VPN logic)
-		info "Blocking MDM domains..."
+		# Block MDM domains (Enhanced with IPv6 and full list)
+		info "Blocking MDM enrollment domains..."
 		hosts_file="$system_path/etc/hosts"
 		domains=("deviceenrollment.apple.com" "mdmenrollment.apple.com" "iprofiles.apple.com" "gdmf.apple.com" "acmdm.apple.com" "albert.apple.com")
 		for domain in "${domains[@]}"; do
-			grep -q "$domain" "$hosts_file" 2>/dev/null || echo "0.0.0.0 $domain" >> "$hosts_file"
-			grep -q ":: $domain" "$hosts_file" 2>/dev/null || echo ":: $domain" >> "$hosts_file"
+			grep -q "0.0.0.0 $domain" "$hosts_file" 2>/dev/null || echo "0.0.0.0 $domain" >>"$hosts_file"
+			grep -q ":: $domain" "$hosts_file" 2>/dev/null || echo ":: $domain" >>"$hosts_file"
 		done
 		chflags uchg "$hosts_file" 2>/dev/null
+		success "MDM domains blocked and hosts file locked"
+		echo ""
 
-		# 4. Markers and Plist Modification (Persistence logic)
+		# Configuration Modifications (Enhanced Logic)
+		info "Configuring MDM bypass settings..."
 		config_path="$system_path/var/db/ConfigurationProfiles/Settings"
 		mkdir -p "$config_path" 2>/dev/null
-		
-		# Remove positive activation records (Strict parity with Dora script)
-		info "Removing existing activation records..."
+
+		# Remove positive activation records
 		rm -rf "$config_path"/.cloudConfigHasActivationRecord 2>/dev/null
 		rm -rf "$config_path"/.cloudConfigRecordFound 2>/dev/null
-		
-		# Create and lock negative/bypass markers (Dora + Micaixin logic)
+
+		# Create and lock negative markers
 		markers=(
 			".cloudConfigProfileInstalled"
 			".cloudConfigRecordNotFound"
@@ -169,24 +292,23 @@ select opt in "${options[@]}"; do
 			chflags uchg "$config_path/$marker" 2>/dev/null
 		done
 
-		# 5. Daemon Suppression (System-level switch)
+		# Force Disable Flag
 		disable_flag="$system_path/var/db/.com.apple.mdmclient.daemon.forced_disable"
 		chflags nouchg "$disable_flag" 2>/dev/null
 		touch "$disable_flag" 2>/dev/null
 		chflags uchg "$disable_flag" 2>/dev/null
 
-		# 6. Direct Plist Modification (Configuration parity)
+		# Direct Plist Modification
 		managed_client_plist="$config_path/com.apple.ManagedClient.plist"
 		[ ! -f "$managed_client_plist" ] && echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict></dict></plist>' > "$managed_client_plist"
 		for key in "CloudConfigRecordFound" "CloudConfigHasActivationRecord" "CloudConfigProfileInstalled"; do
 			/usr/libexec/PlistBuddy -c "Set :$key false" "$managed_client_plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :$key bool false" "$managed_client_plist"
 		done
 		chflags uchg "$managed_client_plist" 2>/dev/null
+		success "Configuration markers and Plist modifications applied"
 
-		# 7. Service Disablement (Layered suppression)
-		info "Disabling MDM service agents and daemons..."
-		
-		# User-level agent suppression
+		# Service Disablement (Integrated from additional service research)
+		info "Disabling MDM service agents..."
 		USER_IDS=$(dscl -f "$dscl_path" localhost -list /Local/Default/Users UniqueID 2>/dev/null | awk '$2>=501 {print $2}')
 		for USER_ID in $USER_IDS; do
 			launchctl disable "gui/${USER_ID}/com.apple.ManagedClientAgent.enrollagent" 2>/dev/null || true
@@ -194,22 +316,33 @@ select opt in "${options[@]}"; do
 			launchctl disable "user/${USER_ID}/com.apple.ManagedClientAgent.enrollagent" 2>/dev/null || true
 			launchctl bootout  "user/${USER_ID}/com.apple.ManagedClientAgent.enrollagent" 2>/dev/null || true
 		done
-
-		# System-level daemon suppression
-		services=(
-			"com.apple.ManagedClient.cloudconfigurationd"
-			"com.apple.ManagedClient.daemon"
-			"com.apple.ManagedClient.enroll"
-		)
+		services=("com.apple.ManagedClient.cloudconfigurationd" "com.apple.ManagedClient.daemon" "com.apple.ManagedClient.enroll")
 		for service in "${services[@]}"; do
 			launchctl disable "system/$service" 2>/dev/null || true
 			launchctl bootout  "system/$service" 2>/dev/null || true
 		done
-		success "All MDM services and agents suppressed."
+		success "All MDM services suppressed"
 
-		echo -e "\n${GRN}Bypass Completed Successfully!${NC}"
-		break ;;
+		echo ""
+		echo -e "${GRN}╔═══════════════════════════════════════════════╗${NC}"
+		echo -e "${GRN}║       MDM Bypass Completed Successfully!     ║${NC}"
+		echo -e "${GRN}╚═══════════════════════════════════════════════╝${NC}"
+		echo ""
+		echo -e "${CYAN}Next steps:${NC}"
+		echo -e "  1. Close this terminal window"
+		echo -e "  2. Reboot your Mac"
+		echo -e "  3. Login with username: ${YEL}$username${NC} and password: ${YEL}$passw${NC}"
+		echo ""
+		break
+		;;
 	"Reboot & Exit")
-		reboot; break ;;
+		echo ""
+		info "Rebooting system..."
+		reboot
+		break
+		;;
+	*)
+		echo -e "${RED}Invalid option $REPLY${NC}"
+		;;
 	esac
 done
