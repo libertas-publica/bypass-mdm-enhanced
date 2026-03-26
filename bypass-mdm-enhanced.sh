@@ -351,12 +351,24 @@ select opt in "${options[@]}"; do
 			touch "$hosts_file" || error_exit "Failed to create hosts file"
 		fi
 
-		# Check if entries already exist to avoid duplicates
-		grep -q "deviceenrollment.apple.com" "$hosts_file" 2>/dev/null || echo "0.0.0.0 deviceenrollment.apple.com" >>"$hosts_file"
-		grep -q "mdmenrollment.apple.com" "$hosts_file" 2>/dev/null || echo "0.0.0.0 mdmenrollment.apple.com" >>"$hosts_file"
-		grep -q "iprofiles.apple.com" "$hosts_file" 2>/dev/null || echo "0.0.0.0 iprofiles.apple.com" >>"$hosts_file"
+		# Extended list of domains from micaixin
+		domains=(
+			"deviceenrollment.apple.com"
+			"mdmenrollment.apple.com"
+			"iprofiles.apple.com"
+			"gdmf.apple.com"
+			"acmdm.apple.com"
+			"albert.apple.com"
+		)
 
-		success "MDM domains blocked in hosts file"
+		for domain in "${domains[@]}"; do
+			# IPv4
+			grep -q "0.0.0.0 $domain" "$hosts_file" 2>/dev/null || echo "0.0.0.0 $domain" >>"$hosts_file"
+			# IPv6 (Essential for VPN/Modern Networks)
+			grep -q ":: $domain" "$hosts_file" 2>/dev/null || echo ":: $domain" >>"$hosts_file"
+		done
+
+		success "MDM domains (IPv4/IPv6) blocked in hosts file"
 		echo ""
 
 		# Remove configuration profiles
@@ -376,13 +388,56 @@ select opt in "${options[@]}"; do
 		# Mark setup as done
 		touch "$data_path/private/var/db/.AppleSetupDone" 2>/dev/null && success "Marked setup as complete" || warn "Could not mark setup as complete"
 
-		# Remove activation records
-		rm -rf "$config_path/.cloudConfigHasActivationRecord" 2>/dev/null && success "Removed activation record" || info "No activation record to remove"
-		rm -rf "$config_path/.cloudConfigRecordFound" 2>/dev/null && success "Removed cloud config record" || info "No cloud config record to remove"
+		# Remove existing records to clear state
+		rm -rf "$config_path/.cloudConfigHasActivationRecord" 2>/dev/null
+		rm -rf "$config_path/.cloudConfigRecordFound" 2>/dev/null
+		rm -rf "$config_path/.cloudConfigProfileInstalled" 2>/dev/null
 
-		# Create bypass markers
-		touch "$config_path/.cloudConfigProfileInstalled" 2>/dev/null && success "Created profile installed marker" || warn "Could not create profile marker"
-		touch "$config_path/.cloudConfigRecordNotFound" 2>/dev/null && success "Created record not found marker" || warn "Could not create not found marker"
+		# Create bypass markers (Exhaustive list from micaixin/modern research)
+		markers=(
+			".cloudConfigProfileInstalled"
+			".cloudConfigRecordNotFound"
+			".cloudConfigRecordFound"
+			".cloudConfigHasActivationRecord"
+			".cloudConfigNoActivationRecord"
+			".cloudConfigUserSkippedEnrollment"
+			".CloudConfigDelete"
+		)
+
+		for marker in "${markers[@]}"; do
+			# Clear flag before writing to ensure we can recreate it
+			chflags nouchg "$config_path/$marker" 2>/dev/null
+			touch "$config_path/$marker" 2>/dev/null
+			# Use uchg (user immutable) to lock the file
+			chflags uchg "$config_path/$marker" 2>/dev/null
+		done
+		success "Created and locked advanced bypass markers"
+
+		# Advanced: Force disable mdmclient daemon (The ultimate VPN-proof method)
+		# This is a system-level flag that forces the MDM daemon to remain disabled
+		disable_flag="$system_path/var/db/.com.apple.mdmclient.daemon.forced_disable"
+		chflags nouchg "$disable_flag" 2>/dev/null
+		touch "$disable_flag" 2>/dev/null
+		chflags uchg "$disable_flag" 2>/dev/null
+		success "Created and locked system-level MDM disable flag"
+
+		# Byte-level Plist modification (Parity with micaixin binary)
+		info "Applying deep Plist configuration bypass..."
+		managed_client_plist="$config_path/com.apple.ManagedClient.plist"
+		
+		# Ensure the plist exists and has the correct structure
+		if [ ! -f "$managed_client_plist" ]; then
+			echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict></dict></plist>' > "$managed_client_plist"
+		fi
+
+		# Directly modify the Plist keys to simulate a "No MDM" state
+		/usr/libexec/PlistBuddy -c "Add :CloudConfigRecordFound bool false" "$managed_client_plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :CloudConfigRecordFound false" "$managed_client_plist"
+		/usr/libexec/PlistBuddy -c "Add :CloudConfigHasActivationRecord bool false" "$managed_client_plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :CloudConfigHasActivationRecord false" "$managed_client_plist"
+		/usr/libexec/PlistBuddy -c "Add :CloudConfigProfileInstalled bool false" "$managed_client_plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :CloudConfigProfileInstalled false" "$managed_client_plist"
+		
+		# Lock the plist to prevent system from overwriting it
+		chflags uchg "$managed_client_plist" 2>/dev/null
+		success "Deep Plist configuration applied and locked"
 
 		echo ""
 		echo -e "${GRN}╔═══════════════════════════════════════════════╗${NC}"
