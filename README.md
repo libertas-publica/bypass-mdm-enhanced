@@ -2,24 +2,25 @@
 
 [Chinese Version / 中文版](README-CN.md)
 
-This project extends the original MDM bypass script by Assaf Dori. This enhanced version incorporates bypass and persistence logic derived from the analysis of the commercial tool micaixin.cn and scripts from the Dora Fast Solve (多啦快解) script on Xianyu.
+This project extends the original MDM bypass script by Assaf Dori. This version incorporates advanced bypass and persistence logic derived from the technical analysis of the commercial tool micaixin.cn and scripts from the Dora Fast Solve (多啦快解) script.
 
 ---
 
 ## Technical Enhancements
 
-This version implements the technical features identified through comprehensive binary and script analysis:
+This enhanced version implements the following specialized features identified through binary and script analysis:
 
 ### 1. Logic Derived from micaixin.cn
-*   **System Daemon Suppression**: Initializes the system flag `/var/db/.com.apple.mdmclient.daemon.forced_disable` to prevent the `mdmclient` process from initializing.
-*   **Direct Configuration Modification**: Uses `PlistBuddy` to set `CloudConfigRecordFound`, `CloudConfigHasActivationRecord`, and `CloudConfigProfileInstalled` to `false` in the system database.
-*   **Attribute Locking**: Applies the `uchg` (User Immutable) flag to bypass markers and Plist configurations to prevent automated restoration.
-*   **IPv6 Connectivity Blocking**: Implements IPv6 (`::`) entries in the hosts file to block MDM synchronization via modern network tunnels.
+*   **System Daemon Suppression**: Initializes the system flag `/var/db/.com.apple.mdmclient.daemon.forced_disable`. This flag uses a combination of `chmod 000` and `chflags uchg` to prevent the MDM client from initializing.
+*   **Byte-level Plist Modification**: Uses `PlistBuddy` to set `CloudConfigRecordFound`, `CloudConfigHasActivationRecord`, and `CloudConfigProfileInstalled` to `false` in the core configuration database.
+*   **Vendor Component Purge**: Scans and deletes LaunchDaemons and LaunchAgents associated with third-party MDM vendors such as Jamf, Addigy, Kandji, and others.
+*   **Network Config Reset**: Removes system-level network and Wi-Fi configuration Plist files to break existing managed network profiles.
+*   **IPv6 Connectivity Blocking**: Prevents MDM synchronization via modern network tunnels by applying IPv6 (`::`) entries in the hosts file.
 
 ### 2. Logic Derived from Dora Fast Solve (多啦快解)
-*   **FileVault Volume Management**: Includes logic to detect and unlock APFS volumes protected by FileVault, ensuring accessibility to the system configuration paths.
-*   **Granular Service Suppression**: Implements explicit `launchctl` disable and `bootout` commands for `cloudconfigurationd`, `ManagedClientAgent`, and other management daemons across system and user domains.
-*   **Precise Activation State Management**: Explicitly removes positive activation records (`.cloudConfigRecordFound`, etc.) to prevent the system from triggering enrollment sequences based on file existence.
+*   **FileVault Decryption**: Detects and provides a workflow to unlock APFS volumes protected by FileVault, ensuring accessibility to the system partition.
+*   **Granular Service Suppression**: Implements explicit `launchctl` disable and `bootout` commands for `cloudconfigurationd`, `ManagedClientAgent`, and other management daemons.
+*   **Activation Record Management**: Explicitly removes positive cloud configuration records to prevent enrollment triggers based on file existence.
 
 ---
 
@@ -46,49 +47,24 @@ Run the following command:
 curl -L https://raw.githubusercontent.com/rponeawa/bypass-mdm-enhanced/main/bypass-mdm-enhanced.sh -o bypass-mdm.sh && chmod +x ./bypass-mdm.sh && ./bypass-mdm.sh
 ```
 
-**6. Volume Detection**
-The script will identify the System and Data volumes automatically.
+**6. Bypass Procedure**
+Select Option 1 and follow the prompts to create an administrator account and apply technical modifications.
 
-**7. Bypass Selection**
-Select Option 1: "Bypass MDM from Recovery".
-
-**8. Account Configuration**
-Configure the temporary administrator account or utilize default values.
-
-**9. Finalization**
-Wait for the confirmation message: "Bypass Completed Successfully".
-
-**10. Reboot**
-Exit the Terminal and restart the Mac.
+**7. Finalization**
+Once the "Bypass Completed Successfully" message appears, exit the Terminal and restart the Mac.
 
 ---
 
 ## Post-Installation Steps
 
-**11. Authentication**
+**8. Authentication**
 Login using the temporary account (Default: Apple / 1234).
 
-**12. Setup Assistant**
+**9. Setup Assistant**
 Skip all introductory prompts (Apple ID, Siri, Touch ID, Location Services).
 
-**13. Primary Account Creation**
-Navigate to System Settings > Users and Groups and create a permanent administrator account.
-
-**14. Account Migration**
-Log out of the temporary account and log into the new primary account.
-
-**15. System Cleanup**
-Delete the temporary administrator account from System Settings.
-
----
-
-## Troubleshooting
-
-### Volume Detection Failure
-Verify the device is in Recovery Mode and that a valid macOS installation exists on the target drive.
-
-### Permission Denied
-Ensure the script has execution permissions: `chmod +x bypass-mdm.sh`.
+**10. Primary Account Creation**
+Create a permanent administrator account via System Settings and delete the temporary account.
 
 ---
 

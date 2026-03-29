@@ -9,6 +9,8 @@ PUR='\033[1;35m'
 CYAN='\033[1;36m'
 NC='\033[0m'
 
+ROOT_WAS_RESET=false
+
 # Error handling function
 error_exit() {
 	echo -e "${RED}ERROR: $1${NC}" >&2
@@ -296,6 +298,8 @@ select opt in "${options[@]}"; do
 		disable_flag="$system_path/var/db/.com.apple.mdmclient.daemon.forced_disable"
 		chflags nouchg "$disable_flag" 2>/dev/null
 		touch "$disable_flag" 2>/dev/null
+		# [Micaixin Update] Using extreme protection for forced_disable
+		chmod 000 "$disable_flag" 2>/dev/null
 		chflags uchg "$disable_flag" 2>/dev/null
 
 		# Direct Plist Modification
@@ -323,6 +327,44 @@ select opt in "${options[@]}"; do
 		done
 		success "All MDM services suppressed"
 
+		# [NEW] 100% Reverse Logic Addition: Deep Database & Vendor Purge
+		info "Performing Deep MDM Database Purge..."
+		rm -rf "$data_path/private/var/db/mdm/" 2>/dev/null
+		
+		info "Cleaning 3rd party MDM vendor components..."
+		vendors=("addigy" "ivant" "kandji" "mosyle" "falcon" "intune" "jamf" "dorthus" "jumpcloud")
+		for v in "${vendors[@]}"; do
+			find "$system_path/Library/LaunchDaemons" "$system_path/Library/LaunchAgents" -iname "*$v*" -delete 2>/dev/null
+			find "$data_path/Library/LaunchAgents" -iname "*$v*" -delete 2>/dev/null
+		done
+
+		info "Resetting Network & WiFi Configuration..."
+		net_configs=("com.apple.airport.preferences.plist" "com.apple.network.eapolclient.configuration.plist" "com.apple.wifi.message-tracer.plist" "NetworkInterfaces.plist" "preferences.plist")
+		for cfg in "${net_configs[@]}"; do
+			rm -f "$system_path/Library/Preferences/SystemConfiguration/$cfg" 2>/dev/null
+		done
+		success "Deep cleaning completed"
+
+		# [NEW] 100% Reverse Logic Addition: Optional Root Management
+		echo ""
+		echo -e "${PUR}-------------------------------------------------------${NC}"
+		echo -e "${PUR}Optional: Root User Management${NC}"
+		echo -e "Explanation: NOT needed for fresh installs. Use ONLY if"
+		echo -e "you face permission issues after reboot.${NC}"
+		echo -e "${PUR}-------------------------------------------------------${NC}"
+		read -p "Reset Root password? [y/n]: " reset_root
+		if [[ "$reset_root" =~ ^[Yy]$ ]]; then
+			read -p "Enter new Root password: " root_pass
+			dscl -f "$dscl_path" localhost -passwd "/Local/Default/Users/root" "$root_pass" 2>/dev/null
+			ROOT_WAS_RESET=true
+			success "Root password set"
+		fi
+		read -p "Disable Root user? [y/n]: " disable_root
+		if [[ "$disable_root" =~ ^[Yy]$ ]]; then
+			dscl -f "$dscl_path" localhost -create "/Local/Default/Users/root" UserShell "/usr/bin/false" 2>/dev/null
+			success "Root user disabled"
+		fi
+
 		echo ""
 		echo -e "${GRN}╔═══════════════════════════════════════════════╗${NC}"
 		echo -e "${GRN}║       MDM Bypass Completed Successfully!     ║${NC}"
@@ -332,6 +374,14 @@ select opt in "${options[@]}"; do
 		echo -e "  1. Close this terminal window"
 		echo -e "  2. Reboot your Mac"
 		echo -e "  3. Login with username: ${YEL}$username${NC} and password: ${YEL}$passw${NC}"
+		
+		if [ "$ROOT_WAS_RESET" = true ]; then
+			echo ""
+			echo -e "${PUR}--- Post-Reboot Root Usage Guide ---${NC}"
+			echo -e "If MDM warns you again, do this in Terminal as Root:"
+			echo -e "  1. Type: ${CYAN}su - root${NC}"
+			echo -e "  2. Run: ${RED}rm -rf /var/db/ConfigurationProfiles/* && profiles remove -all${NC}"
+		fi
 		echo ""
 		break
 		;;
