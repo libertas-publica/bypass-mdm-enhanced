@@ -262,7 +262,7 @@ select opt in "${options[@]}"; do
 		# Block MDM domains (Enhanced with IPv6 and full list)
 		info "Blocking MDM enrollment domains..."
 		hosts_file="$system_path/etc/hosts"
-		domains=("deviceenrollment.apple.com" "mdmenrollment.apple.com" "iprofiles.apple.com" "gdmf.apple.com" "acmdm.apple.com" "albert.apple.com")
+		domains=("deviceenrollment.apple.com" "mdmenrollment.apple.com" "iprofiles.apple.com" "acmdm.apple.com")
 		for domain in "${domains[@]}"; do
 			grep -q "0.0.0.0 $domain" "$hosts_file" 2>/dev/null || echo "0.0.0.0 $domain" >>"$hosts_file"
 			grep -q ":: $domain" "$hosts_file" 2>/dev/null || echo ":: $domain" >>"$hosts_file"
