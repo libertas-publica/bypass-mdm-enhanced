@@ -19,17 +19,22 @@ error_exit() {
 
 # Warning function
 warn() {
-	echo -e "${YEL}WARNING: $1${NC}"
+	echo -e "${YEL}WARNING: $1${NC}" >&2
 }
 
 # Success function
 success() {
-	echo -e "${GRN}✓ $1${NC}"
+	echo -e "${GRN}✓ $1${NC}" >&2
 }
 
 # Info function
 info() {
-	echo -e "${BLU}ℹ $1${NC}"
+	echo -e "${BLU}ℹ $1${NC}" >&2
+}
+
+# Debug function
+debug() {
+	echo -e "${PUR}[DEBUG] $1${NC}" >&2
 }
 
 # Validation function for username
@@ -94,6 +99,124 @@ find_available_uid() {
 	return 1
 }
 
+# Mount (and if needed, FileVault-unlock) the Data volume in Recovery Mode.
+# APFS volumes are not auto-mounted in Recovery, and on modern Macs the Data
+# volume is typically FileVault-encrypted. Must run before detect_volumes.
+mount_data_volume() {
+	info "=== MOUNT DATA VOLUME STEP ==="
+
+	if [ -d "/Volumes/Data" ]; then
+		info "Data volume already mounted at /Volumes/Data"
+		return 0
+	fi
+
+	debug "Data volume not found at /Volumes/Data, need to mount it"
+
+	local data_volume_id=""
+	info "Searching for 'Data' volume in diskutil..."
+
+	data_volume_id=$(diskutil list | grep "APFS Volume" | grep "Data" | grep "disk3" | awk '{print $NF}' | head -1)
+	debug "After searching on disk3: data_volume_id='$data_volume_id'"
+
+	if [ -z "$data_volume_id" ]; then
+		debug "Not found on disk3, searching all disks..."
+		data_volume_id=$(diskutil list | grep "APFS Volume" | grep "Data" | awk '{print $NF}' | head -1)
+		debug "After searching all disks: data_volume_id='$data_volume_id'"
+	fi
+
+	if [ -z "$data_volume_id" ]; then
+		error_exit "Could not find 'Data' volume identifier in diskutil output"
+	fi
+
+	info "Found data volume identifier: $data_volume_id"
+
+	local volume_status
+	volume_status=$(diskutil apfs list 2>&1 | grep -A 15 "Volume $data_volume_id" | head -20)
+	debug "Volume status:\n$volume_status"
+
+	if echo "$volume_status" | grep -E "(FileVault.*Yes|Locked.*Yes)" > /dev/null; then
+		warn "FileVault-encrypted Data volume detected — unlock required"
+
+		local unlock_success=0
+		local unlock_attempts=0
+		while [ $unlock_success -eq 0 ] && [ $unlock_attempts -lt 3 ]; do
+			unlock_attempts=$((unlock_attempts + 1))
+			echo "" >&2
+			if [ $unlock_attempts -eq 1 ]; then
+				echo -e "${YEL}Enter your FileVault password (the one used at startup)${NC}" >&2
+				read -s -p "Password: " filevault_pass
+			else
+				echo -e "${RED}Password incorrect. Attempt $unlock_attempts of 3${NC}" >&2
+				read -s -p "Try again: " filevault_pass
+			fi
+			echo "" >&2
+
+			local unlock_output
+			unlock_output=$(diskutil apfs unlockVolume "$data_volume_id" -passphrase "$filevault_pass" 2>&1)
+			if [ $? -eq 0 ]; then
+				success "Volume unlocked"
+				unlock_success=1
+			else
+				warn "Unlock failed: $unlock_output"
+			fi
+		done
+
+		if [ $unlock_success -eq 0 ]; then
+			error_exit "Failed to unlock volume after $unlock_attempts attempts"
+		fi
+	fi
+
+	info "Mounting data volume..."
+	local mount_output
+
+	# Method 1: standard mount
+	mount_output=$(diskutil mount "$data_volume_id" 2>&1)
+	debug "Method 1 (mount) output: $mount_output"
+	if echo "$mount_output" | grep -q "mounted"; then
+		sleep 1
+		if [ -d "/Volumes/Data" ]; then
+			success "Data volume mounted"
+			return 0
+		fi
+	fi
+
+	# Method 2: mountDisk
+	mount_output=$(diskutil mountDisk "$data_volume_id" 2>&1)
+	debug "Method 2 (mountDisk) output: $mount_output"
+	if echo "$mount_output" | grep -q "mounted"; then
+		sleep 1
+		if [ -d "/Volumes/Data" ]; then
+			success "Data volume mounted (method 2)"
+			return 0
+		fi
+	fi
+
+	# Method 3: explicit mount point
+	mkdir -p /Volumes/Data 2>/dev/null
+	mount_output=$(diskutil mount -mountPoint /Volumes/Data "$data_volume_id" 2>&1)
+	debug "Method 3 (explicit mountPoint) output: $mount_output"
+	if echo "$mount_output" | grep -q "mounted"; then
+		sleep 1
+		if [ -d "/Volumes/Data" ]; then
+			success "Data volume mounted (method 3)"
+			return 0
+		fi
+	fi
+
+	# Method 4: raw mount(8)
+	local device_path="/dev/$data_volume_id"
+	if [ -e "$device_path" ]; then
+		mount_output=$(mount -t apfs "$device_path" /Volumes/Data 2>&1)
+		if [ $? -eq 0 ] && [ -d "/Volumes/Data" ]; then
+			success "Data volume mounted (method 4)"
+			return 0
+		fi
+		debug "Method 4 failed: $mount_output"
+	fi
+
+	error_exit "All mount methods failed. Could not mount data volume."
+}
+
 # Function to detect system volumes with multiple fallback strategies (Restored Original)
 detect_volumes() {
 	local system_vol=""
@@ -148,6 +271,12 @@ detect_volumes() {
 	echo "$system_vol|$data_vol"
 }
 
+# Mount & unlock the Data volume first (Recovery Mode doesn't auto-mount APFS)
+mount_data_volume
+if [ ! -d "/Volumes/Data" ]; then
+	error_exit "Mount process reported success but /Volumes/Data does not exist"
+fi
+
 # Detect volumes at startup
 volume_info=$(detect_volumes)
 system_volume=$(echo "$volume_info" | cut -d'|' -f1)
@@ -174,12 +303,6 @@ select opt in "${options[@]}"; do
 		echo -e "${YEL}  Starting MDM Bypass Process${NC}"
 		echo -e "${YEL}═══════════════════════════════════════${NC}"
 		echo ""
-
-		# FileVault Check (Integrated from decryption research)
-		if ! diskutil mount "$data_volume" 2>/dev/null; then
-			warn "Data volume is locked (FileVault). Please enter your login password to unlock."
-			diskutil apfs unlockVolume "$data_volume" || error_exit "Failed to unlock Data volume."
-		fi
 
 		# Normalize data volume name if needed
 		if [ "$data_volume" != "Data" ]; then
