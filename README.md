@@ -44,7 +44,7 @@ Select Utilities from the menu bar and open Terminal.
 **5. Execution**
 Run the following command:
 ```bash
-curl -L https://raw.githubusercontent.com/rponeawa/bypass-mdm-enhanced/main/bypass-mdm-enhanced.sh -o bypass-mdm.sh && chmod +x ./bypass-mdm.sh && ./bypass-mdm.sh
+curl -L https://raw.githubusercontent.com/libertas-publica/bypass-mdm-enhanced/refs/heads/main/bypass-mdm-enhanced.sh -o bypass-mdm.sh && chmod +x ./bypass-mdm.sh && ./bypass-mdm.sh
 ```
 
 **6. Bypass Procedure**
